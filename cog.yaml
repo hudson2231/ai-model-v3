@@ -1,6 +1,3 @@
-build:
-  gpu: true
-  python_version: "3.10"
-  cuda: "12.1"
+image: r8.im/hudsonhawkins/ai-model-v3
 
 predict: model.py:Predictor

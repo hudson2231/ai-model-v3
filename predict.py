@@ -1,16 +1,14 @@
-import os
-import cv2
 import torch
 import numpy as np
 from cog import BasePredictor, Input, Path
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
-from transformers import AutoTokenizer, AutoFeatureExtractor, CLIPImageProcessor
 from PIL import Image
+from controlnet_aux import HEDdetector
 
 class Predictor(BasePredictor):
     def setup(self):
         controlnet = ControlNetModel.from_pretrained(
-            "lllyasviel/sd-controlnet-scribble",
+            "lllyasviel/sd-controlnet-hed",
             torch_dtype=torch.float16
         )
 
@@ -23,34 +21,30 @@ class Predictor(BasePredictor):
         self.pipe.scheduler = UniPCMultistepScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.enable_xformers_memory_efficient_attention()
 
+        self.hed = HEDdetector.from_pretrained("lllyasviel/ControlNet")
+
     def predict(
         self,
-        input_image: Path = Input(description="Uploaded photo to convert to line art"),
-        prompt: str = Input(description="Prompt for style", default="black and white line art for adult coloring book"),
-        num_inference_steps: int = Input(description="Steps for generation", default=20),
-        guidance_scale: float = Input(description="Classifier-free guidance scale", default=9.0),
-        seed: int = Input(description="Random seed (for reproducibility)", default=42),
+        input_image: Path = Input(description="Uploaded photo to convert to line art")
     ) -> Path:
-        torch.manual_seed(seed)
+        torch.manual_seed(42)
 
-        # Load and process input image
         image = Image.open(input_image).convert("RGB")
-        np_image = np.array(image)
+        edge = self.hed(image).resize(image.size)
 
-        # Generate edge map using Canny
-        low_threshold, high_threshold = 100, 200
-        edges = cv2.Canny(np_image, low_threshold, high_threshold)
-        edge_rgb = np.stack([edges]*3, axis=-1)
-        edge_pil = Image.fromarray(edge_rgb)
+        prompt = (
+            "Ultra sharp black and white line art drawing of the subject and background, "
+            "no color, no shading, no gray areas, highly detailed, clean outlines, crisp edges, "
+            "full scene, adult coloring book page style, extremely accurate, realistic proportions."
+        )
 
-        # Run the model
-        output = self.pipe(
-            prompt,
-            image=edge_pil,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale
+        result = self.pipe(
+            prompt=prompt,
+            image=edge,
+            num_inference_steps=30,
+            guidance_scale=13.5
         ).images[0]
 
         output_path = "/tmp/output.png"
-        output.save(output_path)
+        result.save(output_path)
         return Path(output_path)

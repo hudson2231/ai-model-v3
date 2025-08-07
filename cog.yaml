@@ -4,5 +4,7 @@ build:
   python_version: "3.10"
   python_requirements: requirements.txt
   cog_runtime: true
+  run:
+    pip_install_args: ["--no-cache-dir"]
 
 predict: model.py:Predictor
